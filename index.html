@@ -489,6 +489,12 @@
 
         // Inicializar quando a página carregar
         window.onload = init;
+        
+        // Redimensionar canvas quando a tela mudar
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', () => {
+            setTimeout(resizeCanvas, 100);
+        });
     </script>
 </body>
 </html>
