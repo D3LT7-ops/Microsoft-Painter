@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paint Clone</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f0f0;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .toolbar {
+            background: #e1e1e1;
+            border-bottom: 1px solid #ccc;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .tool-group {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            border-right: 1px solid #ccc;
+            padding-right: 15px;
+            margin-right: 5px;
+        }
+
+        .tool-group:last-child {
+            border-right: none;
+        }
+
+        .tool-btn {
+            background: #f9f9f9;
+            border: 1px solid #ccc;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: all 0.2s;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .tool-btn:hover {
+            background: #e5e5e5;
+        }
+
+        .tool-btn.active {
+            background: #0078d4;
+            color: white;
+            border-color: #0078d4;
+        }
+
+        .color-palette {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 2px;
+            margin-right: 10px;
+        }
+
+        .color-swatch {
+            width: 25px;
+            height: 25px;
+            border: 2px solid #333;
+            cursor: pointer;
+            border-radius: 2px;
+        }
+
+        .color-swatch.active {
+            border: 2px solid #000;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+
+        .canvas-container {
+            flex: 1;
+            background: white;
+            border: 1px solid #ccc;
+            margin: 10px;
+            position: relative;
+            overflow: auto;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.1);
+        }
+
+        #canvas {
+            display: block;
+            cursor: crosshair;
+            background: white;
+        }
+
+        .size-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .size-slider {
+            width: 80px;
+        }
+
+        .status-bar {
+            background: #e1e1e1;
+            border-top: 1px solid #ccc;
+            padding: 5px 10px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .toolbar {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .tool-group {
+                border-right: none;
+                border-bottom: 1px solid #ccc;
+                padding-bottom: 10px;
+                margin-bottom: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="toolbar">
+            <div class="tool-group">
+                <button class="tool-btn" onclick="newCanvas()">📄 Novo</button>
+                <button class="tool-btn" onclick="document.getElementById('fileInput').click()">📁 Abrir</button>
+                <button class="tool-btn" onclick="saveImage()">💾 Salvar</button>
+                <input type="file" id="fileInput" class="file-input" accept="image/*" onchange="loadImage(event)">
+            </div>
+
+            <div class="tool-group">
+                <button class="tool-btn active" data-tool="brush" onclick="selectTool('brush')">🖌️ Pincel</button>
+                <button class="tool-btn" data-tool="eraser" onclick="selectTool('eraser')">🧹 Borracha</button>
+                <button class="tool-btn" data-tool="line" onclick="selectTool('line')">📏 Linha</button>
+                <button class="tool-btn" data-tool="rectangle" onclick="selectTool('rectangle')">⬜ Retângulo</button>
+                <button class="tool-btn" data-tool="circle" onclick="selectTool('circle')">⭕ Círculo</button>
+                <button class="tool-btn" data-tool="fill" onclick="selectTool('fill')">🪣 Balde</button>
+            </div>
+
+            <div class="tool-group">
+                <div class="size-control">
+                    <label>Tamanho:</label>
+                    <input type="range" class="size-slider" min="1" max="50" value="5" onchange="changeBrushSize(this.value)">
+                    <span id="sizeDisplay">5px</span>
+                </div>
+            </div>
+
+            <div class="tool-group">
+                <div class="color-palette" id="colorPalette"></div>
+                <input type="color" id="colorPicker" value="#000000" onchange="changeColor(this.value)">
+            </div>
+
+            <div class="tool-group">
+                <button class="tool-btn" onclick="clearCanvas()">🗑️ Limpar</button>
+                <button class="tool-btn" onclick="undo()">↶ Desfazer</button>
+            </div>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="canvas" width="800" height="600"></canvas>
+        </div>
+
+        <div class="status-bar">
+            <span>Ferramenta: <span id="currentTool">Pincel</span></span>
+            <span>Posição: <span id="mousePos">0, 0</span></span>
+            <span>Tamanho: <span id="canvasSize">800 x 600</span></span>
+        </div>
+    </div>
+
+    <script>
+        let canvas = document.getElementById('canvas');
+        let ctx = canvas.getContext('2d');
+        let isDrawing = false;
+        let currentTool = 'brush';
+        let currentColor = '#000000';
+        let brushSize = 5;
+        let startX, startY;
+        let undoStack = [];
+
+        // Paleta de cores padrão
+        const defaultColors = [
+            '#000000', '#FFFFFF', '#FF0000', '#00FF00',
+            '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF',
+            '#800000', '#808000', '#008000', '#800080',
+            '#008080', '#000080', '#FFA500', '#FFC0CB'
+        ];
+
+        // Inicializar
+        function init() {
+            createColorPalette();
+            setupCanvas();
+            saveState();
+        }
+
+        function createColorPalette() {
+            const palette = document.getElementById('colorPalette');
+            defaultColors.forEach((color, index) => {
+                const swatch = document.createElement('div');
+                swatch.className = 'color-swatch';
+                swatch.style.backgroundColor = color;
+                if (index === 0) swatch.classList.add('active');
+                swatch.onclick = () => changeColor(color);
+                palette.appendChild(swatch);
+            });
+        }
+
+        function setupCanvas() {
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseout', stopDrawing);
+            canvas.addEventListener('mousemove', updateMousePosition);
+
+            // Prevenir menu de contexto
+            canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+            // Configurações iniciais do canvas
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+        }
+
+        function selectTool(tool) {
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`[data-tool="${tool}"]`).classList.add('active');
+            currentTool = tool;
+            
+            const toolNames = {
+                brush: 'Pincel',
+                eraser: 'Borracha',
+                line: 'Linha',
+                rectangle: 'Retângulo',
+                circle: 'Círculo',
+                fill: 'Balde'
+            };
+            
+            document.getElementById('currentTool').textContent = toolNames[tool];
+            
+            // Mudar cursor baseado na ferramenta
+            canvas.style.cursor = tool === 'fill' ? 'pointer' : 'crosshair';
+        }
+
+        function changeColor(color) {
+            currentColor = color;
+            document.getElementById('colorPicker').value = color;
+            
+            // Atualizar seleção visual na paleta
+            document.querySelectorAll('.color-swatch').forEach(swatch => {
+                swatch.classList.remove('active');
+                if (swatch.style.backgroundColor === color || rgbToHex(swatch.style.backgroundColor) === color) {
+                    swatch.classList.add('active');
+                }
+            });
+        }
+
+        function changeBrushSize(size) {
+            brushSize = parseInt(size);
+            document.getElementById('sizeDisplay').textContent = size + 'px';
+        }
+
+        function startDrawing(e) {
+            if (currentTool === 'fill') {
+                floodFill(e.offsetX, e.offsetY);
+                return;
+            }
+            
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+            
+            if (currentTool === 'brush' || currentTool === 'eraser') {
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+            }
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const currentX = e.clientX - rect.left;
+            const currentY = e.clientY - rect.top;
+            
+            ctx.lineWidth = brushSize;
+            ctx.strokeStyle = currentTool === 'eraser' ? '#FFFFFF' : currentColor;
+            ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+            
+            if (currentTool === 'brush' || currentTool === 'eraser') {
+                ctx.lineTo(currentX, currentY);
+                ctx.stroke();
+            }
+        }
+
+        function stopDrawing(e) {
+            if (!isDrawing) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const endX = e.clientX - rect.left;
+            const endY = e.clientY - rect.top;
+            
+            ctx.globalCompositeOperation = 'source-over';
+            
+            switch (currentTool) {
+                case 'line':
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.lineWidth = brushSize;
+                    ctx.strokeStyle = currentColor;
+                    ctx.stroke();
+                    break;
+                    
+                case 'rectangle':
+                    ctx.beginPath();
+                    ctx.rect(startX, startY, endX - startX, endY - startY);
+                    ctx.lineWidth = brushSize;
+                    ctx.strokeStyle = currentColor;
+                    ctx.stroke();
+                    break;
+                    
+                case 'circle':
+                    const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+                    ctx.beginPath();
+                    ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
+                    ctx.lineWidth = brushSize;
+                    ctx.strokeStyle = currentColor;
+                    ctx.stroke();
+                    break;
+            }
+            
+            isDrawing = false;
+            saveState();
+        }
+
+        function floodFill(x, y) {
+            // Implementação simplificada do balde de tinta
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const targetColor = getPixelColor(imageData, x, y);
+            const fillColor = hexToRgb(currentColor);
+            
+            if (colorsMatch(targetColor, fillColor)) return;
+            
+            const stack = [[x, y]];
+            const visited = new Set();
+            
+            while (stack.length > 0) {
+                const [currentX, currentY] = stack.pop();
+                const key = `${currentX},${currentY}`;
+                
+                if (visited.has(key) || currentX < 0 || currentX >= canvas.width || currentY < 0 || currentY >= canvas.height) {
+                    continue;
+                }
+                
+                const pixelColor = getPixelColor(imageData, currentX, currentY);
+                if (!colorsMatch(pixelColor, targetColor)) {
+                    continue;
+                }
+                
+                visited.add(key);
+                setPixelColor(imageData, currentX, currentY, fillColor);
+                
+                stack.push([currentX + 1, currentY]);
+                stack.push([currentX - 1, currentY]);
+                stack.push([currentX, currentY + 1]);
+                stack.push([currentX, currentY - 1]);
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            saveState();
+        }
+
+        function getPixelColor(imageData, x, y) {
+            const index = (y * imageData.width + x) * 4;
+            return [
+                imageData.data[index],
+                imageData.data[index + 1],
+                imageData.data[index + 2],
+                imageData.data[index + 3]
+            ];
+        }
+
+        function setPixelColor(imageData, x, y, color) {
+            const index = (y * imageData.width + x) * 4;
+            imageData.data[index] = color[0];
+            imageData.data[index + 1] = color[1];
+            imageData.data[index + 2] = color[2];
+            imageData.data[index + 3] = 255;
+        }
+
+        function colorsMatch(color1, color2) {
+            return color1[0] === color2[0] && color1[1] === color2[1] && color1[2] === color2[2];
+        }
+
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? [
+                parseInt(result[1], 16),
+                parseInt(result[2], 16),
+                parseInt(result[3], 16)
+            ] : [0, 0, 0];
+        }
+
+        function rgbToHex(rgb) {
+            const result = rgb.match(/\d+/g);
+            return result ? "#" + ((1 << 24) + (parseInt(result[0]) << 16) + (parseInt(result[1]) << 8) + parseInt(result[2])).toString(16).slice(1) : '#000000';
+        }
+
+        function updateMousePosition(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor(e.clientX - rect.left);
+            const y = Math.floor(e.clientY - rect.top);
+            document.getElementById('mousePos').textContent = `${x}, ${y}`;
+        }
+
+        function saveState() {
+            undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+            if (undoStack.length > 20) undoStack.shift();
+        }
+
+        function undo() {
+            if (undoStack.length > 1) {
+                undoStack.pop();
+                const previousState = undoStack[undoStack.length - 1];
+                ctx.putImageData(previousState, 0, 0);
+            }
+        }
+
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            saveState();
+        }
+
+        function newCanvas() {
+            clearCanvas();
+        }
+
+        function saveImage() {
+            const link = document.createElement('a');
+            link.download = 'desenho.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+
+        function loadImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    saveState();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Inicializar quando a página carregar
+        window.onload = init;
+    </script>
+</body>
+</html>
